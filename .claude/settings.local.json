@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
+  "model": "claude-opus-4-6",
+  "effortLevel": "high",
+  "alwaysThinkingEnabled": true
+}
+
