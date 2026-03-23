@@ -60,11 +60,18 @@ Write subcommands:
   push-upstream                 git push -u origin HEAD
   pull-rebase <branch>          git pull --rebase origin <branch>
   checkout <branch>             git checkout <branch>
-  checkout-new <branch> [start] git checkout -b <branch> [start] (start: master only)
+  checkout-new <branch> [start] git checkout -b <branch> [start] (start: master, workflow/*)
   fetch-master                  git fetch origin master --quiet
-  merge <branch>                git merge origin/<branch> --no-edit (master only)
+  merge <branch>                git merge origin/<branch> --no-edit (master, workflow/*)
   merge-continue                git commit --no-edit (merge continuation)
   merge-abort                   git merge --abort
+
+Worktree subcommands:
+  worktree-add <path> <branch>                  git worktree add <path> <branch>
+  worktree-add-new <path> <branch> <start>      git worktree add -b <branch> <path> <start>
+  worktree-remove <path>                        git worktree remove <path> --force
+  worktree-list                                 git worktree list
+  worktree-prune                                git worktree prune
 USAGE
 }
 
@@ -198,10 +205,10 @@ case "$SUBCOMMAND" in
         reject_flags "$@"
         if [ $# -eq 2 ]; then
             case "$2" in
-                master)
+                master|workflow/*)
                     ;;
                 *)
-                    log_error "start-point is restricted to: master"
+                    log_error "start-point is restricted to: master, workflow/*"
                     exit 1
                     ;;
             esac
@@ -220,10 +227,10 @@ case "$SUBCOMMAND" in
         [ $# -ne 1 ] && { log_error "merge requires exactly one argument: <branch>"; exit 1; }
         reject_flags "$@"
         case "$1" in
-            master)
+            master|workflow/*)
                 ;;
             *)
-                log_error "merge is restricted to base branches only: master"
+                log_error "merge is restricted to base branches only: master, workflow/*"
                 log_error "To merge other branches, use GitHub pull requests."
                 exit 1
                 ;;
@@ -239,6 +246,60 @@ case "$SUBCOMMAND" in
     merge-abort)
         [ $# -ne 0 ] && { log_error "merge-abort takes no arguments."; exit 1; }
         exec git merge --abort
+        ;;
+
+    # =====================================================================
+    # Worktree サブコマンド
+    # =====================================================================
+
+    worktree-add)
+        [ $# -ne 2 ] && { log_error "worktree-add requires exactly two arguments: <path> <branch>"; exit 1; }
+        reject_flags "$@"
+        local_path="$1"
+        local_branch="$2"
+        case "$local_path" in
+            .worktrees/*) ;;
+            *) log_error "worktree path must be under .worktrees/"; exit 1 ;;
+        esac
+        exec git worktree add "$local_path" "$local_branch"
+        ;;
+
+    worktree-add-new)
+        [ $# -ne 3 ] && { log_error "worktree-add-new requires exactly three arguments: <path> <branch> <start-point>"; exit 1; }
+        reject_flags "$@"
+        local_path="$1"
+        local_branch="$2"
+        local_start="$3"
+        case "$local_path" in
+            .worktrees/*) ;;
+            *) log_error "worktree path must be under .worktrees/"; exit 1 ;;
+        esac
+        case "$local_start" in
+            master|origin/master|workflow/*|origin/workflow/*) ;;
+            *) log_error "start-point is restricted to: master, origin/master, workflow/*, origin/workflow/*"; exit 1 ;;
+        esac
+        exec git worktree add -b "$local_branch" "$local_path" "$local_start"
+        ;;
+
+    worktree-remove)
+        [ $# -ne 1 ] && { log_error "worktree-remove requires exactly one argument: <path>"; exit 1; }
+        reject_flags "$@"
+        local_path="$1"
+        case "$local_path" in
+            .worktrees/*) ;;
+            *) log_error "worktree path must be under .worktrees/"; exit 1 ;;
+        esac
+        exec git worktree remove "$local_path" --force
+        ;;
+
+    worktree-list)
+        [ $# -ne 0 ] && { log_error "worktree-list takes no arguments."; exit 1; }
+        exec git worktree list
+        ;;
+
+    worktree-prune)
+        [ $# -ne 0 ] && { log_error "worktree-prune takes no arguments."; exit 1; }
+        exec git worktree prune
         ;;
 
     # =====================================================================

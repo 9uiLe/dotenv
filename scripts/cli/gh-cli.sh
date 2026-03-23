@@ -128,6 +128,16 @@ case "$SUBCOMMAND" in
         [ ${#labels[@]} -eq 0 ]  && { log_error "pr-create: --label is required (at least one)."; exit 1; }
         [ -z "$local_assignee" ] && { log_error "pr-create: --assignee is required."; exit 1; }
 
+        # Base branch validation: master or workflow/* branches only
+        case "$local_base" in
+            master|workflow/*)
+                ;;
+            *)
+                log_error "pr-create: --base is restricted to: master, workflow/*"
+                exit 1
+                ;;
+        esac
+
         # ラベルのバリデーション: リポジトリの実在ラベルと照合
         valid_labels=$(gh label list --limit 100 --json name --jq '.[].name')
         for label in "${labels[@]}"; do

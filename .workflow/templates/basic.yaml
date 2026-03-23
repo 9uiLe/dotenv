@@ -1,0 +1,43 @@
+name: add-user-settings
+description: "ユーザー設定画面の追加"
+
+branch:
+  base: master
+  prefix: workflow
+
+settings:
+  auto-pr: true
+  pr-labels:
+    - enhancement
+  pr-assignee: "@me"
+
+steps:
+  - name: create-data-model
+    description: "データモデルとリポジトリの作成"
+    prompt: |
+      UserSettings データモデルを作成してください。
+      - UserSettings 構造体の定義
+      - リポジトリパターンの実装
+      - 基本的な CRUD 操作
+    depends-on: []
+
+  - name: create-settings-view
+    description: "設定画面 UI の作成"
+    prompt: |
+      SettingsView を作成してください。
+      - 設定一覧画面
+      - 各設定項目の編集 UI
+      - データモデルとのバインディング
+    depends-on:
+      - create-data-model
+
+  - name: add-tests
+    description: "ユニットテストの追加"
+    prompt: |
+      テストを書いてください。
+      - データモデルのユニットテスト
+      - リポジトリのテスト
+      - ビューモデルのテスト
+    depends-on:
+      - create-data-model
+      - create-settings-view

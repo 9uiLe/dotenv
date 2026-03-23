@@ -96,3 +96,30 @@ elapsed_sec() {
     local start="$1"
     echo $(( $(date +%s) - start ))
 }
+
+# 必須コマンドの存在確認
+require_command() {
+    local cmd="$1"
+    local install_hint="${2:-}"
+    if ! command -v "$cmd" &>/dev/null; then
+        log_error "Required command not found: ${cmd}"
+        if [ -n "$install_hint" ]; then
+            log_error "Install with: ${install_hint}"
+        fi
+        exit 1
+    fi
+}
+
+# タイムスタンプベースの ID を生成
+generate_timestamp_id() {
+    date +"%Y%m%d-%H%M%S"
+}
+
+# 文字列をスラッグ化（小文字、ハイフン区切り）
+slugify() {
+    local result
+    result=$(echo "$1" | tr '[:upper:]' '[:lower:]' | tr -c '[:alnum:]\n' '-' | tr -s '-')
+    result="${result#-}"
+    result="${result%-}"
+    echo "$result"
+}
