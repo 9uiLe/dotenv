@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  security:
+    name: Secrets and Python security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # Verified against the release commits in the official actions repositories.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+      - name: Install checksum-verified Gitleaks
+        env:
+          GITLEAKS_VERSION: '8.30.1'
+          # Official release asset digest for linux_x64.
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            --output "$archive"
+          printf '%s  %s\n' "$GITLEAKS_SHA256" "$archive" | sha256sum --check --strict
+          tar -xzf "$archive" --directory "$RUNNER_TEMP" gitleaks
+      - name: Check all Git history for secrets without printing secrets
+        run: |
+          "$RUNNER_TEMP/gitleaks" git . --log-opts='--all' --redact=100 --no-banner --timeout=120
+      - name: Install pinned CI security tools
+        run: |
+          python -m pip install --disable-pip-version-check --only-binary=:all: --no-deps -r requirements-ci.txt
+          python -m pip check
+      - name: Run every Bandit rule and reject medium or high findings
+        # LOW subprocess/fixture/assert diagnostics remain visible. The regression
+        # suite checks the path guards, shell-free argument handling, and rollback.
+        # No runtime dependency audit: the application uses the standard library.
+        run: |
+          bandit -r prototype shared --format json --output "$RUNNER_TEMP/bandit.json" --exit-zero
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads((Path(os.environ['RUNNER_TEMP']) / 'bandit.json').read_text())
+          if report.get('errors'):
+              raise SystemExit('Bandit could not parse all Python files')
+          findings = report['results']
+          for item in findings:
+              print(f"{item['issue_severity']} {item['test_id']} {item['filename']}:{item['line_number']}")
+          blocking = [item for item in findings if item['issue_severity'] != 'LOW']
+          print(f'Bandit: {len(findings)} findings; {len(blocking)} require a fix')
+          if blocking:
+              raise SystemExit(1)
+          PY
+
+  test:
+    name: Regression (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # Cover the documented minimum and the current Python on the target OS.
+        # The full Cartesian matrix would repeat the same platform checks.
+        include:
+          - os: ubuntu-24.04
+            python: '3.11'
+          - os: macos-15
+            python: '3.14'
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Validate the committed shared manifest and Python hooks
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path, PurePosixPath
+          from prototype.engine import validate_bundle
+          from prototype.git_source import MAX_BLOB, MAX_MANIFEST, MAX_TOTAL
+
+          shared = Path('shared')
+          if shared.is_symlink():
+              raise SystemExit('shared must be a real directory')
+          root = shared.resolve()
+
+          def read(name, maximum):
+              relative = PurePosixPath(name)
+              if (not name or relative.is_absolute() or '..' in relative.parts
+                      or str(relative) != name or '\\' in name):
+                  raise ValueError('Invalid manifest path')
+              path = root.joinpath(*relative.parts)
+              if any(parent.is_symlink() for parent in (path, *path.parents)):
+                  raise ValueError('Shared source links are unsupported')
+              if not path.is_file() or path.stat().st_size > maximum:
+                  raise ValueError('Missing or oversized shared file')
+              return path.read_text(encoding='utf-8')
+
+          manifest = json.loads(read('manifest.json', MAX_MANIFEST))
+          if (set(manifest) != {'schema', 'version', 'rules', 'files', 'hooks'}
+                  or type(manifest['schema']) is not int or manifest['schema'] != 1
+                  or not isinstance(manifest['files'], list)):
+              raise ValueError('Invalid manifest schema')
+          names = manifest['files']
+          if len(names) != len(set(names)) or manifest['rules'] in names:
+              raise ValueError('Duplicate shared files')
+          bundle = validate_bundle({
+              'version': manifest['version'],
+              'rules': read(manifest['rules'], MAX_BLOB),
+              'files': {name: read(name, MAX_BLOB) for name in names},
+              'hooks': manifest['hooks'],
+          })
+          size = len((root / 'manifest.json').read_bytes())
+          size += len(bundle['rules'].encode()) + sum(len(text.encode()) for text in bundle['files'].values())
+          if size > MAX_TOTAL:
+              raise ValueError('Shared content exceeds the receiver size limit')
+          print(f"Validated {bundle['version']}: {len(bundle['files'])} files and {len(bundle['hooks'])} hooks")
+          PY
+      - name: Verify important behavior in isolated mock environments
+        run: python -B -m unittest discover -s prototype -p 'test_*.py' -v

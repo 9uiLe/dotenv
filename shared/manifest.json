@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "version": "example-v1",
+  "rules": "rules.md",
+  "files": [
+    "skills/ai-knowledge-example/SKILL.md",
+    "hooks/session_start.py"
+  ],
+  "hooks": [
+    {
+      "id": "shared-version",
+      "event": "SessionStart",
+      "script": "hooks/session_start.py",
+      "tools": [
+        "codex",
+        "claude"
+      ],
+      "timeout": 5
+    }
+  ]
+}
