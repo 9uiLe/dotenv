@@ -61,8 +61,9 @@ def _inactive() -> int:
     return 0
 
 
-def run(home: Path, tool: str, hook_id: str) -> int:
-    home = check_home(home)
+def run(home: Path, tool: str, hook_id: str, *, home_guard=check_home,
+        max_state_bytes=None) -> int:
+    home = home_guard(home)
     if tool not in ('codex', 'claude'):
         raise ValueError('unknown hook tool')
     data = home / '.local/share/ai-knowledge'
@@ -86,11 +87,20 @@ def run(home: Path, tool: str, hook_id: str) -> int:
         except BlockingIOError:
             return _inactive()
         # Re-check after acquiring the lock so the manager's completed state wins.
-        check_home(home)
+        home_guard(home)
         if not state_path.exists():
             return _inactive()
         with os.fdopen(_regular_file(state_path), encoding='utf-8') as state_file:
-            state = json.load(state_file)
+            if (max_state_bytes is not None
+                    and os.fstat(state_file.fileno()).st_size > max_state_bytes):
+                raise ValueError('hook state exceeds the installed runtime size limit')
+            if max_state_bytes is None:
+                state = json.load(state_file)
+            else:
+                raw = state_file.buffer.read(max_state_bytes + 1)
+                if len(raw) > max_state_bytes:
+                    raise ValueError('hook state exceeds the installed runtime size limit')
+                state = json.loads(raw.decode('utf-8'))
         if not isinstance(state, dict) or state.get('phase') not in PHASES:
             raise ValueError('hook state phase is invalid')
         if not isinstance(state.get('hooks_enabled'), bool):

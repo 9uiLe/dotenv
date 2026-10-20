@@ -4,7 +4,8 @@
   "rules": "rules.md",
   "files": [
     "skills/ai-knowledge-example/SKILL.md",
-    "hooks/session_start.py"
+    "hooks/session_start.py",
+    "hooks/token_limit.py"
   ],
   "hooks": [
     {

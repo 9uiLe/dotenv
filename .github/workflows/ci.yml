@@ -54,7 +54,7 @@ jobs:
         # suite checks the path guards, shell-free argument handling, and rollback.
         # No runtime dependency audit: the application uses the standard library.
         run: |
-          bandit -r prototype shared --format json --output "$RUNNER_TEMP/bandit.json" --exit-zero
+          bandit -r ai_knowledge prototype shared --format json --output "$RUNNER_TEMP/bandit.json" --exit-zero
           python - <<'PY'
           import json
           import os

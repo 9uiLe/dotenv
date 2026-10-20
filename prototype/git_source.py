@@ -36,11 +36,11 @@ def _relative(name):
     return path
 
 
-def _endpoint(home, url):
+def _endpoint(home, url, allow_local=True):
     if not isinstance(url, str):
         raise ReceiveError('受信元URLが不正です')
     local = home.parent / 'remote.git'
-    if url == str(local):
+    if allow_local and url == str(local):
         if not local.is_dir():
             raise ReceiveError('模擬Git受信元が見つかりません')
         return 'file'
@@ -79,10 +79,11 @@ def _environment():
 
 
 class _Reader:
-    def __init__(self, home, transport):
+    def __init__(self, home, transport, home_guard=check_home):
         self.home = home
         self.cache = home / '.local/share/ai-knowledge/receive-cache.git'
         self.transport = transport
+        self.home_guard = home_guard
         self.environment = _environment()
         self.git = shutil.which('git')
         if not self.git:
@@ -123,7 +124,7 @@ class _Reader:
             self.command('init', '--bare', '--template=', '--object-format=sha1',
                          str(self.cache), repository=False)
             (self.cache / 'config').write_text(_CACHE_CONFIG, encoding='utf-8')
-        check_home(self.home)
+        self.home_guard(self.home)
         config = self.cache / 'config'
         if (not self.cache.is_dir() or not config.is_file()
                 or not stat.S_ISREG(config.stat().st_mode)
@@ -165,28 +166,30 @@ class _Reader:
             raise ReceiveError('共有元のファイルはUTF-8テキストに限定しています') from error
 
 
-def validate_config(home: Path, config: dict) -> None:
+def validate_config(home: Path, config: dict, *, home_guard=check_home,
+                    allow_local=True) -> None:
     """Validate a source using local checks only; do not create a cache or connect."""
-    home = check_home(Path(home))
+    home = home_guard(Path(home))
     if not isinstance(config, dict) or set(config) != {'url', 'branch', 'manifest'}:
         raise ReceiveError('Git受信設定の形式が不正です')
-    transport = _endpoint(home, config['url'])
+    transport = _endpoint(home, config['url'], allow_local)
     branch = config['branch']
     if (not isinstance(branch, str) or not branch or branch.startswith('-')
             or any(ord(character) < 33 or ord(character) == 127 for character in branch)):
         raise ReceiveError('受信対象ブランチが不正です')
     _relative(config['manifest'])
-    reader = _Reader(home, transport)
+    reader = _Reader(home, transport, home_guard)
     if reader.command('check-ref-format', 'refs/heads/' + branch,
                       repository=False, allow_failure=True).returncode:
         raise ReceiveError('受信対象ブランチが不正です')
 
 
-def receive(home: Path, config: dict, previous: dict | None = None) -> dict:
+def receive(home: Path, config: dict, previous: dict | None = None, *,
+            home_guard=check_home, allow_local=True) -> dict:
     """Fetch a fixed source, reject rewritten history, and return raw shared content."""
-    validate_config(home, config)
+    validate_config(home, config, home_guard=home_guard, allow_local=allow_local)
     home = Path(os.path.abspath(Path(home).expanduser()))
-    transport = _endpoint(home, config['url'])
+    transport = _endpoint(home, config['url'], allow_local)
     branch = config['branch']
     manifest_path = PurePosixPath(config['manifest'])
     source = {'kind': 'git', **config}
@@ -196,7 +199,7 @@ def receive(home: Path, config: dict, previous: dict | None = None) -> dict:
                 or not isinstance(previous.get('commit'), str)
                 or not _OID.fullmatch(previous['commit'])):
             raise ReceiveError('前回と受信元が異なります。自動で切り替えません')
-    reader = _Reader(home, transport)
+    reader = _Reader(home, transport, home_guard)
     reader.prepare()
     reader.command('fetch', '--no-tags', '--no-recurse-submodules',
                    '--no-auto-maintenance', '--no-write-commit-graph',

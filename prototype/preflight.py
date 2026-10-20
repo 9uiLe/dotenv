@@ -1,4 +1,4 @@
-"""Read-only installation projection. Writes private evidence in mock homes only."""
+"""Legacy projection; use ai_knowledge plan for a complete, applicable install plan."""
 
 from copy import deepcopy
 import hashlib
@@ -109,7 +109,7 @@ def project_installation(live_home, bundle, source, profiles=('personal', 'work'
                 patch.append(format_diff((before or {}).get('text', ''), (after or {}).get('text', ''),
                                          target + ' (現在)', target + ' (導入案)'))
             patch_path = evidence / (profile + '.proposed.patch')
-            write_atomic(patch_path, '# 導入案。未提供の本番ランタイムを含むため適用不可。\n' + ''.join(patch))
+            write_atomic(patch_path, '# 旧試作形式の導入案のため適用不可。ai_knowledge planで再作成してください。\n' + ''.join(patch))
             results[profile] = {'outcome': 'projected', 'changes': changes, 'patch': str(patch_path)}
         except (OSError, ValueError) as error:
             results[profile] = {'outcome': 'blocked', 'reason': str(error)}
@@ -123,14 +123,14 @@ def project_installation(live_home, bundle, source, profiles=('personal', 'work'
         'outcome': 'projected', 'read_home': str(live_home), 'profiles': results,
         'live_settings_changed': False, 'source_candidate': source,
         'ready_to_apply': False,
-        'deferred': ['本番ランタイムとインストーラーの用意', 'GitHub上の共有内容と認証の確認',
+        'deferred': ['ai_knowledge planによる導入計画の再作成', 'GitHub上の共有内容と認証の確認',
                      'もう一台の現状確認', 'OS自動起動とAI側読み込みの確認'],
     }
     write_atomic(evidence / 'summary.json', encoded(report))
     lines = ['# 実環境への導入差分（未適用）', '',
              f'読取対象: `{live_home}`。この1台の現状に対する個人用・仕事用の2案。もう一台の差分ではありません。', '',
              '既存設定は読み取るだけで、実際の設定変更は行っていません。差分と設定のコピーはGit対象外のこのフォルダだけに保存しています。', '',
-             '**差分は導入案で、適用できるパッチではありません。** 本番用ランタイムとインストーラーが未提供のため、起動コマンドは予定の配置先を示しています。', '',
+             '**この旧試作形式の差分は適用できるパッチではありません。** 実際の導入にはai_knowledge planでランタイムを含む差分を作成してください。', '',
              '受信元候補はローカルorigin/ブランチから作成。GitHubへ照会していません。差分に使う共有内容は模擬受信したサンプルです。', '',
              '| 想定 | 結果 | 変更対象数 |', '| --- | --- | --- |']
     for profile, result in results.items():
