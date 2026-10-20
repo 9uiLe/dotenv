@@ -8,7 +8,7 @@ import shlex
 import sys
 import tomllib
 
-from prototype.engine_support import (
+from ai_knowledge.engine_support import (
     Conflict, END, REPO, RULES, SCHEDULE, SKILLS, START, TOML_END, TOML_START,
     encoded, read_file,
 )
@@ -19,7 +19,7 @@ class SettingsMixin:
         entries = []
         for hook in bundle['hooks']:
             if tool in hook['tools']:
-                command = shlex.join([sys.executable, str(REPO / 'prototype/hook_runner.py'),
+                command = shlex.join([sys.executable, str(REPO / 'ai_knowledge/hook_runner.py'),
                                       '--home', str(self.home), '--tool', tool, '--hook', hook['id']])
                 entries.append({'event': hook['event'], 'group': {'hooks': [
                     {'type': 'command', 'command': command, 'timeout': hook['timeout']}]}})
@@ -116,8 +116,8 @@ class SettingsMixin:
         return plistlib.dumps({'Label': 'local.ai-knowledge.sync', 'RunAtLoad': True,
                                'StartCalendarInterval': {'Hour': 10, 'Minute': 0},
                                'WorkingDirectory': str(REPO),
-                               'ProgramArguments': [sys.executable, '-m', 'prototype', '--sandbox', str(self.root),
-                                                    '--pc', self.profile, 'sync']}).decode()
+                               'ProgramArguments': [sys.executable, '-m', 'ai_knowledge', '--sandbox', str(self.root),
+                                                    '--profile', self.profile, 'sync']}).decode()
 
     def _schedule_plan(self, state, enabled):
         current = read_file(self.home / SCHEDULE)

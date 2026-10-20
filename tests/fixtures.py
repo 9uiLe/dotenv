@@ -1,4 +1,4 @@
-"""Small, harmless shared knowledge used by the offline prototype."""
+"""Small, harmless shared knowledge used by the offline ai_knowledge."""
 
 import json
 

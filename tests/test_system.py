@@ -1,4 +1,4 @@
-"""Requirement checks in retained mock homes; never use real AI settings."""
+"""Requirement checks in temporary mock homes; never use real AI settings."""
 
 from datetime import datetime, timedelta, timezone
 import json
@@ -6,11 +6,12 @@ from pathlib import Path
 import plistlib
 import subprocess
 import sys
+import shutil
 import unittest
 
-from prototype.engine import Manager
-from prototype.fixtures import make_bundle
-from prototype.sandbox import check_home, create_sandbox
+from ai_knowledge.engine import Manager
+from tests.fixtures import make_bundle
+from ai_knowledge.sandbox import check_home, create_sandbox
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -50,6 +51,7 @@ def target_snapshot(home):
 class SharingSystemCase(unittest.TestCase):
     def setUp(self):
         self.root = create_sandbox(prefix="system-test-")
+        self.addCleanup(shutil.rmtree, self.root)
         self.source = self.root / "source"
         self.bundle = self.publish("v1")
 
@@ -103,7 +105,7 @@ class SharingSystemCase(unittest.TestCase):
 
     def hook_process(self, profile="personal", tool="codex"):
         return subprocess.run(
-            [sys.executable, "-B", str(REPO / "prototype/hook_runner.py"),
+            [sys.executable, "-B", str(REPO / "ai_knowledge/hook_runner.py"),
              "--home", str(self.root / profile), "--tool", tool,
              "--hook", "shared-version"],
             input=json.dumps({"hook_event_name": "SessionStart"}),

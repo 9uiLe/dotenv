@@ -8,13 +8,14 @@ from pathlib import Path
 import plistlib
 import subprocess
 import sys
+import shutil
 import unittest
 
-from prototype import test_system as system
-from prototype.engine import Manager
-from prototype.fixtures import make_bundle
-from prototype.sandbox import create_sandbox
-from prototype.test_system import MORNING, REPO, RULES, SKILLS, TOOLS, target_snapshot, write_text
+from tests import test_system as system
+from ai_knowledge.engine import Manager
+from tests.fixtures import make_bundle
+from ai_knowledge.sandbox import create_sandbox
+from tests.test_system import MORNING, REPO, RULES, SKILLS, TOOLS, target_snapshot, write_text
 
 
 class SharingRecoveryTests(system.SharingSystemCase):
@@ -42,6 +43,7 @@ class SharingRecoveryTests(system.SharingSystemCase):
         for relative in (RULES["codex"], SKILLS["codex"]):
             with self.subTest(relative=relative):
                 root = create_sandbox(prefix="system-conflict-")
+                self.addCleanup(shutil.rmtree, root)
                 home = root / "personal"
                 source = root / "source"
                 write_text(source / "bundle.json", json.dumps(make_bundle("v1")))
@@ -153,7 +155,7 @@ from datetime import datetime
 import os
 from pathlib import Path
 import sys
-from prototype import engine
+from ai_knowledge import engine
 
 home = Path(sys.argv[1])
 original_write = engine.write_atomic

@@ -14,9 +14,9 @@ from unittest.mock import patch
 from ai_knowledge.runtime import LiveManager, run_hook
 from ai_knowledge.source import CiGateError
 from ai_knowledge.target import Target
-from prototype.engine import Conflict, checksum, encoded, write_atomic
-from prototype.fixtures import make_bundle
-from prototype.sandbox import create_sandbox
+from ai_knowledge.engine import Conflict, checksum, encoded, write_atomic
+from tests.fixtures import make_bundle
+from ai_knowledge.sandbox import create_sandbox
 
 
 CONFIG = {'url': 'https://github.com/example/knowledge', 'branch': 'master',
@@ -85,7 +85,7 @@ class LiveTargetBoundaryTests(unittest.TestCase):
         state = target.data / 'state.json'
         state.unlink()
         state.symlink_to(self.root / 'outside-state.json')
-        with patch('prototype.hook_runner.subprocess.run') as launch:
+        with patch('ai_knowledge.hook_runner.subprocess.run') as launch:
             with self.assertRaisesRegex(ValueError, 'シンボリックリンク'):
                 run_hook(target, 'codex', 'sample')
             launch.assert_not_called()
@@ -186,7 +186,7 @@ class LiveTargetBoundaryTests(unittest.TestCase):
         self.assertEqual(result['outcome'], 'failed')
         self.assertIn('64MiB', result['reason'])
         self.assertEqual(rules.read_text(), 'Existing personal instructions.\n')
-        with patch('prototype.hook_runner.subprocess.run') as launch:
+        with patch('ai_knowledge.hook_runner.subprocess.run') as launch:
             with self.assertRaisesRegex(ValueError, 'size limit'):
                 run_hook(target, 'codex', 'sample')
             launch.assert_not_called()

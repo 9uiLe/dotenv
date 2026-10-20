@@ -14,6 +14,11 @@ import stat
 import subprocess
 import sys
 
+try:
+    from .sandbox import check_home
+except ImportError:
+    from sandbox import check_home
+
 
 HOOK_EVENTS = (
     'applypatch-msg', 'pre-applypatch', 'post-applypatch', 'pre-commit',
@@ -82,9 +87,9 @@ def _installation(home):
         if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) & 0o077:
             raise ValueError('管理フォルダは本人所有・権限700にしてください')
     else:
-        if (home.name != document['profile'] or home.parent.parent.name != '.prototype'
-                or _document(home.parent / '.ai-knowledge-sandbox.json') != {'schema': 1}):
-            raise ValueError('模擬環境の場所またはマーカーが不正です')
+        if home.name != document['profile']:
+            raise ValueError('模擬環境とプロファイルが一致しません')
+        check_home(home, scan_tree=False)
     runtime = data / 'runtime'
     if Path(__file__).absolute() != runtime / 'ai_knowledge/git_dispatch.py':
         raise ValueError('導入済みランタイムの場所が一致しません')
@@ -93,7 +98,7 @@ def _installation(home):
         raise ValueError('ランタイムの照合情報がありません')
     for name, expected in hashes.items():
         relative = Path(name)
-        if (len(relative.parts) != 2 or relative.parts[0] not in {'ai_knowledge', 'prototype'}
+        if (len(relative.parts) != 2 or relative.parts[0] != 'ai_knowledge'
                 or relative.suffix != '.py' or str(relative) != name
                 or not isinstance(expected, str) or not re.fullmatch('[0-9a-f]{64}', expected)):
             raise ValueError('ランタイムの照合情報が不正です')

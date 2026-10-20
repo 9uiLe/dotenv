@@ -5,7 +5,7 @@ import os
 import shlex
 import subprocess
 
-from prototype.engine import Conflict, read_file
+from ai_knowledge.engine import Conflict, read_file
 
 
 CHECKER = 'hooks/token_limit.py'

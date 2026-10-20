@@ -7,12 +7,13 @@ from pathlib import Path
 import shlex
 import subprocess
 import sys
+import shutil
 import unittest
 
 from ai_knowledge.target import Target
-from prototype.fixtures import make_bundle
-from prototype.git_fixtures import LocalRemote
-from prototype.sandbox import create_sandbox
+from tests.fixtures import make_bundle
+from tests.git_fixtures import LocalRemote
+from ai_knowledge.sandbox import create_sandbox
 
 
 CHECKER = Path(__file__).resolve().parents[1] / 'shared/hooks/token_limit.py'
@@ -31,6 +32,7 @@ def snapshot(home):
 class GitInstallationTests(unittest.TestCase):
     def setUp(self):
         self.root = create_sandbox(prefix='git-install-test-')
+        self.addCleanup(shutil.rmtree, self.root)
         self.remote = LocalRemote(self.root)
         self.publish('v1')
         self.target = Target.mock(self.root / 'personal')
@@ -54,6 +56,7 @@ class GitInstallationTests(unittest.TestCase):
     def create(self):
         from ai_knowledge.installer import create_plan
         plan = create_plan(self.target, self.config)
+        self.addCleanup(shutil.rmtree, Path(plan['plan']).parent)
         self.assertEqual(plan['outcome'], 'preview', plan)
         return plan
 

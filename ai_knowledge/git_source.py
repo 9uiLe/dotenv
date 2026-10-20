@@ -9,7 +9,7 @@ import shutil
 import stat
 import subprocess
 
-from prototype.sandbox import check_home
+from ai_knowledge.sandbox import check_home
 
 
 MAX_MANIFEST = 64 * 1024

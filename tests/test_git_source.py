@@ -4,13 +4,14 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+import shutil
 import unittest
 from unittest.mock import patch
 
-from prototype.engine import Manager
-from prototype.fixtures import make_bundle
-from prototype.git_fixtures import LocalRemote
-from prototype.sandbox import create_sandbox
+from ai_knowledge.engine import Manager
+from tests.fixtures import make_bundle
+from tests.git_fixtures import LocalRemote
+from ai_knowledge.sandbox import create_sandbox
 
 
 MORNING = datetime(2026, 10, 20, 10, 0, tzinfo=timezone(timedelta(hours=9)))
@@ -36,6 +37,7 @@ def target_snapshot(home):
 class GitSourceTests(unittest.TestCase):
     def setUp(self):
         self.root = create_sandbox(prefix="git-source-test-")
+        self.addCleanup(shutil.rmtree, self.root)
         self.remote = LocalRemote(self.root)
         self.first_commit = self.remote.publish("v1")
         self.config = self.remote.configure()
@@ -238,7 +240,7 @@ class GitSourceTests(unittest.TestCase):
             with self.subTest(url=url):
                 self.configure(url=url)
                 before = target_snapshot(self.home)
-                with patch("prototype.git_source.subprocess.run") as command:
+                with patch("ai_knowledge.git_source.subprocess.run") as command:
                     command.side_effect = AssertionError("Unsafe URL reached a subprocess")
                     result = self.manager.sync(now=MORNING)
                     command.assert_not_called()

@@ -54,7 +54,7 @@ jobs:
         # suite checks the path guards, shell-free argument handling, and rollback.
         # No runtime dependency audit: the application uses the standard library.
         run: |
-          bandit -r ai_knowledge prototype shared --format json --output "$RUNNER_TEMP/bandit.json" --exit-zero
+          bandit -r ai_knowledge tests shared --format json --output "$RUNNER_TEMP/bandit.json" --exit-zero
           python - <<'PY'
           import json
           import os
@@ -100,8 +100,8 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path, PurePosixPath
-          from prototype.engine import validate_bundle
-          from prototype.git_source import MAX_BLOB, MAX_MANIFEST, MAX_TOTAL
+          from ai_knowledge.engine import validate_bundle
+          from ai_knowledge.git_source import MAX_BLOB, MAX_MANIFEST, MAX_TOTAL
 
           shared = Path('shared')
           if shared.is_symlink():
@@ -141,4 +141,4 @@ jobs:
           print(f"Validated {bundle['version']}: {len(bundle['files'])} files and {len(bundle['hooks'])} hooks")
           PY
       - name: Verify important behavior in isolated mock environments
-        run: python -B -m unittest discover -s prototype -p 'test_*.py' -v
+        run: python -B -m unittest discover -s tests -p 'test_*.py' -v

@@ -1,13 +1,13 @@
-"""Path guards for the prototype's generated, repository-local mock homes."""
+"""一時領域に生成した模擬ホームの境界と安全性を検証する。"""
 
 import json
 import os
 from pathlib import Path
+import stat
 import tempfile
 
 
-REPOSITORY = Path(__file__).absolute().parents[1]
-SANDBOXES = REPOSITORY / '.prototype'
+SANDBOXES = Path(tempfile.gettempdir()).resolve() / f'ai-knowledge-{os.getuid()}'
 MARKER = '.ai-knowledge-sandbox.json'
 
 
@@ -17,20 +17,31 @@ def _without_symlinks(path: Path) -> None:
             raise ValueError('sandbox path contains a symbolic link')
 
 
+def _private_directory(path: Path) -> None:
+    _without_symlinks(path)
+    metadata = path.stat()
+    if (not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != os.getuid()
+            or stat.S_IMODE(metadata.st_mode) != 0o700):
+        raise ValueError('sandbox directory must be owned by the current user with mode 700')
+
+
 def create_sandbox(prefix: str = 'validation-') -> Path:
     """Create an isolated pair of empty mock homes; never use the real HOME."""
     if not isinstance(prefix, str) or not prefix or '/' in prefix or '\\' in prefix:
         raise ValueError('invalid sandbox prefix')
     _without_symlinks(SANDBOXES)
-    SANDBOXES.mkdir(exist_ok=True)
+    SANDBOXES.mkdir(mode=0o700, exist_ok=True)
+    _private_directory(SANDBOXES)
     root = Path(tempfile.mkdtemp(prefix=prefix, dir=SANDBOXES))
-    (root / MARKER).write_text(json.dumps({'schema': 1}) + '\n', encoding='utf-8')
+    marker = root / MARKER
+    marker.write_text(json.dumps({'schema': 1}) + '\n', encoding='utf-8')
+    marker.chmod(0o600)
     for profile in ('personal', 'work'):
         (root / profile).mkdir()
     return root
 
 
-def check_home(home: Path) -> Path:
+def check_home(home: Path, *, scan_tree: bool = True) -> Path:
     """Accept only personal/work directly below a marked generated sandbox."""
     supplied = Path(home).expanduser()
     if '..' in supplied.parts:
@@ -40,12 +51,14 @@ def check_home(home: Path) -> Path:
     if home.name not in ('personal', 'work') or root.parent != SANDBOXES:
         raise ValueError('home must be a generated personal/work sandbox')
     _without_symlinks(home)
-    if not root.is_dir():
-        raise ValueError('sandbox root is missing')
+    _private_directory(SANDBOXES)
+    _private_directory(root)
     marker = root / MARKER
     _without_symlinks(marker)
-    if not marker.is_file():
-        raise ValueError('sandbox marker is missing')
+    metadata = marker.stat()
+    if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid()
+            or stat.S_IMODE(metadata.st_mode) != 0o600):
+        raise ValueError('sandbox marker must be a private regular file')
     try:
         if marker.stat().st_size > 4096:
             raise ValueError('sandbox marker is invalid')
@@ -57,6 +70,8 @@ def check_home(home: Path) -> Path:
         raise ValueError('sandbox marker is invalid')
     if home.exists() and not home.is_dir():
         raise ValueError('sandbox home is not a directory')
+    if not scan_tree:
+        return home
     # Walk without following links, including links outside the selected profile.
     def unreadable(error):
         raise ValueError('sandbox contains an unreadable directory') from error
@@ -64,6 +79,9 @@ def check_home(home: Path) -> Path:
     for directory, subdirectories, filenames in os.walk(
             root, followlinks=False, onerror=unreadable):
         for name in (*subdirectories, *filenames):
-            if (Path(directory) / name).is_symlink():
+            metadata = (Path(directory) / name).lstat()
+            if stat.S_ISLNK(metadata.st_mode):
                 raise ValueError('sandbox contains a symbolic link')
+            if not (stat.S_ISREG(metadata.st_mode) or stat.S_ISDIR(metadata.st_mode)):
+                raise ValueError('sandbox contains a special file')
     return home

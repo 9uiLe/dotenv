@@ -3,13 +3,14 @@
 from datetime import timedelta
 import json
 import tomllib
+import shutil
 import unittest
 
-from prototype import test_system as system
-from prototype.engine import Manager
-from prototype.fixtures import make_bundle
-from prototype.sandbox import create_sandbox
-from prototype.test_system import MORNING, TOOLS, target_snapshot, write_text
+from tests import test_system as system
+from ai_knowledge.engine import Manager
+from tests.fixtures import make_bundle
+from ai_knowledge.sandbox import create_sandbox
+from tests.test_system import MORNING, TOOLS, target_snapshot, write_text
 
 
 class SharingHookTests(system.SharingSystemCase):
@@ -83,6 +84,7 @@ class SharingHookTests(system.SharingSystemCase):
         for metadata_before_install in (True, False):
             with self.subTest(metadata_before_install=metadata_before_install):
                 root = create_sandbox(prefix="system-hook-trust-")
+                self.addCleanup(shutil.rmtree, root)
                 home, source = root / "personal", root / "source"
                 config, hook_config = home / ".codex/config.toml", home / ".codex/hooks.json"
                 write_text(config, original + (trust_metadata if metadata_before_install else ''))

@@ -1,4 +1,4 @@
-"""Installed distribution engine; the prototype keeps its original mock guard."""
+"""導入先の境界と共有元検証を適用する配布エンジン。"""
 
 from copy import deepcopy
 import json
@@ -9,9 +9,9 @@ import shlex
 import stat
 
 from ai_knowledge.target import Target
-from prototype.engine import Conflict, Manager, RULES, SKILLS, checksum, encoded, read_file, validate_bundle
-from prototype.git_source import receive, validate_config
-from prototype.hook_runner import run as run_shared_hook
+from ai_knowledge.engine import Conflict, Manager, RULES, SKILLS, checksum, encoded, read_file, validate_bundle
+from ai_knowledge.git_source import receive, validate_config
+from ai_knowledge.hook_runner import run as run_shared_hook
 
 
 MAX_STATE_BYTES = 64 * 1024 * 1024

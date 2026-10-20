@@ -8,7 +8,7 @@ from pathlib import Path
 from ai_knowledge.runtime import LiveManager, run_hook
 from ai_knowledge.scheduler import FakeLaunchctl, Scheduler
 from ai_knowledge.target import Target
-from prototype.engine import encoded, write_atomic
+from ai_knowledge.engine import encoded, write_atomic
 
 
 def _schedule_operation(target, operation, scheduler=None):
@@ -127,7 +127,7 @@ def _installed_target(path):
     if document['python'] != str(target.python):
         raise ValueError('導入時のPythonと異なります。配置を確認してください')
     from ai_knowledge.installer import runtime_files
-    from prototype.engine import checksum
+    from ai_knowledge.engine import checksum
     if {name: checksum(text) for name, text in runtime_files(root=target.runtime).items()} != document['runtime_hashes']:
         raise ValueError('導入済みの実行処理が変更されています。更新とHookを実行せず確認してください')
     return target
@@ -141,7 +141,6 @@ def parser():
     plan = commands.add_parser('plan', help='既存設定を読み取り、導入差分を私有フォルダへ保存')
     plan.add_argument('--url', default='https://github.com/9uiLe/dotenv.git')
     plan.add_argument('--branch', default='master')
-    commands.add_parser('upgrade-runtime', help='導入済みランタイムの更新差分を作成（設定・共有版は保持）')
     install = commands.add_parser('apply', help='照合済みの導入差分を適用し日次更新を登録')
     install.add_argument('--plan', type=Path, required=True)
     install.add_argument('--apply', action='store_true', required=True)
@@ -162,23 +161,13 @@ def main(argv=None, installation=None):
     args = parser().parse_args(argv)
     try:
         if args.command == 'apply':
-            from ai_knowledge.installer import _read_plan, apply_plan
-            capsule = _read_plan(args.plan)
-            if not isinstance(capsule, dict):
-                raise ValueError('導入計画の形式が不正です')
-            if capsule.get('action') == 'runtime-upgrade':
-                from ai_knowledge.upgrade import apply_upgrade_plan
-                result = apply_upgrade_plan(args.plan)
-            else:
-                result = apply_plan(args.plan)
+            from ai_knowledge.installer import apply_plan
+            result = apply_plan(args.plan)
         else:
             target = (_installed_target(installation) if installation is not None else
                       Target.mock(args.sandbox / args.profile, args.profile) if args.sandbox else
                       Target.live(args.profile))
-            if args.command == 'upgrade-runtime':
-                from ai_knowledge.upgrade import create_upgrade_plan
-                result = create_upgrade_plan(target)
-            elif args.command == 'plan':
+            if args.command == 'plan':
                 from ai_knowledge.installer import create_plan
                 result = create_plan(target, {'url': args.url, 'branch': args.branch, 'manifest': 'shared/manifest.json'})
             elif args.command == 'hook':

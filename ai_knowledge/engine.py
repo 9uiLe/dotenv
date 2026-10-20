@@ -1,4 +1,4 @@
-"""Persistent distribution engine restricted to marked, repository-local mock homes."""
+"""共有設定の状態管理・差分作成・トランザクションと復元を扱う。"""
 
 from contextlib import contextmanager
 from copy import deepcopy
@@ -9,12 +9,12 @@ import os
 from pathlib import Path, PurePosixPath
 import tempfile
 
-from prototype.engine_settings import SettingsMixin
-from prototype.engine_support import (
+from ai_knowledge.engine_settings import SettingsMixin
+from ai_knowledge.engine_support import (
     Conflict, END, REPO, RULES, SCHEDULE, SKILLS, START, TOML_END, TOML_START,
     checksum, encoded, format_diff, read_file, validate_bundle, write_atomic,
 )
-from prototype.sandbox import check_home
+from ai_knowledge.sandbox import check_home
 
 
 class Manager(SettingsMixin):
@@ -204,7 +204,7 @@ class Manager(SettingsMixin):
         configuration = read_file(self.source / 'git.json')
         previous = state.get('last_received_source') or (state['active'] or {}).get('source')
         if configuration is not None:
-            from prototype.git_source import receive
+            from ai_knowledge.git_source import receive
             received = receive(self.home, json.loads(configuration['text']),
                                previous=previous if previous and previous.get('kind') == 'git' else None)
             return validate_bundle(received['bundle']), received['source']

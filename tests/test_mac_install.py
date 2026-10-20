@@ -7,13 +7,14 @@ from pathlib import Path
 import plistlib
 import subprocess
 import sys
+import shutil
 import unittest
 from unittest.mock import patch
 
 from ai_knowledge.scheduler import FakeLaunchctl, Scheduler
 from ai_knowledge.target import Target
-from prototype.git_fixtures import LocalRemote
-from prototype.sandbox import create_sandbox
+from tests.git_fixtures import LocalRemote
+from ai_knowledge.sandbox import create_sandbox
 
 
 JST = timezone(timedelta(hours=9))
@@ -37,6 +38,7 @@ class MacInstallationFixture:
 
     def setUp(self):
         self.root = create_sandbox(prefix='mac-install-test-')
+        self.addCleanup(shutil.rmtree, self.root)
         self.remote = LocalRemote(self.root)
         self.first = self.remote.publish('v1')
         self.config = {'url': str(self.remote.remote), 'branch': 'main',
@@ -63,6 +65,7 @@ class MacInstallationFixture:
     def create(self, target):
         from ai_knowledge.installer import create_plan
         result = create_plan(target, self.config)
+        self.addCleanup(shutil.rmtree, Path(result['plan']).parent)
         self.assertEqual(result['outcome'], 'preview', result)
         self.assertTrue(Path(result['plan']).is_absolute())
         self.assertTrue(Path(result['plan']).is_file())
@@ -268,7 +271,7 @@ class MacInstallationTests(MacInstallationFixture, unittest.TestCase):
     def test_changed_installed_runtime_blocks_operations_and_hooks(self):
         target = self.target()
         self.install(target)
-        runtime_file = target.runtime / 'prototype/engine.py'
+        runtime_file = target.runtime / 'ai_knowledge/engine.py'
         write_text(runtime_file, runtime_file.read_text() + '\n# changed after installation\n')
         before = files_under(target.home)
         fake = FakeLaunchctl(registered=True)

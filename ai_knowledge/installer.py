@@ -9,30 +9,28 @@ import stat
 
 from ai_knowledge.runtime import LiveManager
 from ai_knowledge.target import Target
-from prototype.engine import SCHEDULE, checksum, encoded, read_file, validate_bundle, write_atomic
-from prototype.git_source import receive
-from prototype.sandbox import create_sandbox
+from ai_knowledge.engine import SCHEDULE, checksum, encoded, read_file, validate_bundle, write_atomic
+from ai_knowledge.git_source import receive
+from ai_knowledge.sandbox import create_sandbox
 
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 DATA = '.local/share/ai-knowledge/'
-CORE_FILES = ('__init__.py', 'engine.py', 'engine_support.py', 'engine_settings.py',
-              'sandbox.py', 'git_source.py', 'hook_runner.py')
-APP_FILES = ('__init__.py', '__main__.py', 'entrypoint.py', 'cli.py', 'installer.py',
-             'runtime.py', 'target.py', 'scheduler.py', 'source.py', 'git_config.py',
-             'git_dispatch.py', 'upgrade.py')
+RUNTIME_FILES = ('__init__.py', '__main__.py', 'entrypoint.py', 'cli.py', 'installer.py',
+                 'runtime.py', 'target.py', 'scheduler.py', 'source.py', 'git_config.py',
+                 'git_dispatch.py', 'engine.py', 'engine_support.py', 'engine_settings.py',
+                 'sandbox.py', 'git_source.py', 'hook_runner.py')
 
 
 def runtime_files(root=REPOSITORY):
     files = {}
-    for package, names in (('prototype', CORE_FILES), ('ai_knowledge', APP_FILES)):
-        for name in names:
-            path = root / package / name
-            if path.is_symlink() or not path.is_file():
-                raise ValueError('配布用ランタイムのソースが不足しています')
-            text = path.read_text(encoding='utf-8')
-            compile(text, str(path), 'exec')
-            files[package + '/' + name] = text
+    for name in RUNTIME_FILES:
+        path = root / 'ai_knowledge' / name
+        if path.is_symlink() or not path.is_file():
+            raise ValueError('配布用ランタイムのソースが不足しています')
+        text = path.read_text(encoding='utf-8')
+        compile(text, str(path), 'exec')
+        files['ai_knowledge/' + name] = text
     return files
 
 
@@ -40,18 +38,20 @@ def _candidate(target, config):
     """Fetch away from the target; never create a cache in a live home for planning."""
     LiveManager(target).validate_source(config)
     scratch = create_sandbox(prefix='install-receive-')
-    os.chmod(scratch, 0o700)
-    actual = dict(config)
-    if target.mode == 'mock' and config['url'] == str(target.home.parent / 'remote.git'):
-        shutil.copytree(target.home.parent / 'remote.git', scratch / 'remote.git', symlinks=True)
-        actual['url'] = str(scratch / 'remote.git')
-    received = receive(scratch / 'personal', actual)
-    received['source']['url'] = config['url']
-    received['bundle'] = validate_bundle(received['bundle'])
-    if target.mode == 'live':
-        from ai_knowledge.source import require_ci_success
-        received['ci'] = require_ci_success(received['source'])
-    return received
+    try:
+        actual = dict(config)
+        if target.mode == 'mock' and config['url'] == str(target.home.parent / 'remote.git'):
+            shutil.copytree(target.home.parent / 'remote.git', scratch / 'remote.git', symlinks=True)
+            actual['url'] = str(scratch / 'remote.git')
+        received = receive(scratch / 'personal', actual)
+        received['source']['url'] = config['url']
+        received['bundle'] = validate_bundle(received['bundle'])
+        if target.mode == 'live':
+            from ai_knowledge.source import require_ci_success
+            received['ci'] = require_ci_success(received['source'])
+        return received
+    finally:
+        shutil.rmtree(scratch)
 
 
 def _extras(target, config, files):

@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from ai_knowledge.scheduler import FakeLaunchctl, Scheduler
-from prototype.test_mac_install import MacInstallationFixture, RULES, SETTINGS, files_under
+from tests.test_mac_install import MacInstallationFixture, RULES, SETTINGS, files_under
 
 
 class MacLifecycleTests(MacInstallationFixture, unittest.TestCase):

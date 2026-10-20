@@ -8,10 +8,11 @@ from pathlib import Path
 import shlex
 import subprocess
 import sys
-import tempfile
+import shutil
 import unittest
 
 from ai_knowledge.git_dispatch import DATA, HOOK_EVENTS
+from ai_knowledge.sandbox import create_sandbox
 
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -23,23 +24,21 @@ def encoded(value):
 
 class GitDispatchTests(unittest.TestCase):
     def setUp(self):
-        root = REPOSITORY / '.prototype'
-        root.mkdir(exist_ok=True)
-        temporary = tempfile.TemporaryDirectory(prefix='git-dispatch-', dir=root)
-        self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name)
-        self.write(self.root / '.ai-knowledge-sandbox.json', encoded({'schema': 1}))
+        self.root = create_sandbox(prefix='git-dispatch-')
+        self.addCleanup(shutil.rmtree, self.root)
         self.home = self.root / 'personal'
-        self.home.mkdir(mode=0o700)
+        self.home.chmod(0o700)
         self.data = self.home / DATA
         self.dispatcher = self.data / 'runtime/ai_knowledge/git_dispatch.py'
-        source = (REPOSITORY / 'ai_knowledge/git_dispatch.py').read_text(encoding='utf-8')
-        self.write(self.dispatcher, source)
+        sources = {name: (REPOSITORY / 'ai_knowledge' / name).read_text(encoding='utf-8')
+                   for name in ('git_dispatch.py', 'sandbox.py')}
+        for name, text in sources.items():
+            self.write(self.dispatcher.parent / name, text)
         self.write(self.data / 'installation.json', encoded({
             'schema': 1, 'home': str(self.home), 'profile': 'personal', 'mode': 'mock',
             'python': str(Path(sys.executable).absolute()),
-            'runtime_hashes': {'ai_knowledge/git_dispatch.py':
-                               hashlib.sha256(source.encode('utf-8')).hexdigest()},
+            'runtime_hashes': {f'ai_knowledge/{name}': hashlib.sha256(text.encode('utf-8')).hexdigest()
+                               for name, text in sources.items()},
         }))
         checker = (REPOSITORY / 'shared/hooks/token_limit.py').read_text(encoding='utf-8')
         self.bundle = {'version': 'test', 'rules': '', 'hooks': [],

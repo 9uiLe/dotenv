@@ -1,4 +1,4 @@
-"""Execute shared sample hooks only inside a marked prototype mock home."""
+"""配布したHookを照合し、排他制御のもとで実行する。"""
 
 import argparse
 import fcntl

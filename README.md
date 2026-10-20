@@ -1,139 +1,189 @@
-# Mac間でAIのナレッジを共有する
+# Mac間でAIの設定を共有する
 
-仕事と個人のMacで、共有してよいルール・スキル・Hook・Hook用スクリプトを再利用するためのリポジトリです。Mac向けの導入・日次更新・停止・復元を実装し、模擬環境と個人用の実機で検証しています。
+複数のMacへ、共通ルール・スキル・HookとGitのコミット前検査を配るリポジトリです。
+原本をここで編集・公開し、各MacはCIが成功した共有版を毎日10:00に受信します。
+実行時の依存はPython 3.11以上とGitだけです。
 
-## Macへの導入準備
+## 構成と編集場所
 
-Python 3.11以上とGitを使い、個人は`personal`、仕事は`work`で導入差分を作る。
+```text
+shared/                  各PCへ配る原本
+  manifest.json          共有版・配布ファイル・Hook定義
+  rules.md               共通ルール
+  skills/                共通スキル
+  hooks/                 会話開始時Hookとコミット前検査
+ai_knowledge/            導入・受信・日次更新・停止・復元
+tests/                   隔離環境での自動テストとfixture
+.githooks/pre-commit     このリポジトリのコミット前検査
+.github/workflows/ci.yml 公開する共有版の検証
+requirements-ci.txt     CI専用依存の固定
+README.md                導入と運用の説明
+.gitignore               一時生成物の除外
+```
+
+普段編集するのは`shared/`です。ファイルの追加・削除やHookの変更は
+`shared/manifest.json`にも反映します。現在のルール・スキル・会話開始時Hookは
+`example-v1`の見本で、既存PCから取り込んだ設定ではありません。
+配布済みの対象を共有元から削除した場合は、自動削除せず更新を停止します。
+会社・案件固有の情報や認証情報は共有しません。公開するタイミングは自分で決めます。
+
+## 初回導入
+
+通常ユーザーでログインしたMacで実行します。`personal`はCodex、`work`は
+CodexとClaude Codeを対象にします。標準のホームと設定場所を使い、
+`CODEX_HOME`や`CLAUDE_CONFIG_DIR`による別の配置は対象外です。
 
 ```sh
+git clone https://github.com/9uiLe/dotenv.git
+cd dotenv
 python3 -B -m ai_knowledge --profile personal plan
 ```
 
-この操作は既存設定の読み取りと、公開GitHubのCI成功コミットからの差分作成だけを行う。設定適用には、差分確認後の明示操作が必要。毎日10:00の起動、既存設定の保持、停止・復元を含む[導入手順](docs/MAC_INSTALL.md)を参照。
+仕事用Macでは`personal`を`work`に置き換えます。受信元の初期値は
+公開GitHubの`9uiLe/dotenv`、ブランチは`master`です。
+`plan`は既存設定を読み取り、導入差分を表示された私有の一時フォルダへ保存します。
+設定変更や日次処理の登録はまだ行いません。
 
-個人用Macへの適用とLaunchAgent登録、既存設定の保持、停止・復元・再導入を確認済み。自然な10:00の起動と、会話実行時のCodexによるHook呼び出しは未確認。以下の`prototype`コマンドは従来の模擬環境専用で、新しい導入経路の通し確認は`python3 -B -m ai_knowledge.demo`で再現できる。
-
-## 利用方針
-
-- 共通の内容はリポジトリ内の原本で編集する。
-- 共有する内容とGitHubへ送るタイミングは自分で決める。会社・案件固有の内容は共有しない。
-- 各Macは毎日**10:00（そのMacの現地時刻）**に受信を試み、成功時に反映する。
-- 個人MacはCodex、仕事MacはCodexとClaude Codeを対象にする。
-- 公開・送信・削除・費用発生・本物の設定変更は、具体的な内容を確認してから行う。
-
-## 試作品を動かす
-
-Python 3.11以上とGitを使い、このリポジトリの中で実行する。追加ライブラリは不要。
-
-```sh
-python3 prototype/demo.py
-```
-
-新しい模擬環境を `.prototype/validation-.../` に作り、次の流れを実行する。
-
-1. 架空の共通ルール・スキル・Hook登録・Pythonスクリプトを、2台分の模擬ホームへ配る。
-2. 配布済みHookを子プロセスで実行し、v1の出力を確認する。
-3. 同日の重複更新を抑え、日時を翌日10:00へ進めてv2を受信する。
-4. 更新と共有Hookを別々に停止・再開する。
-5. 差分を確認して共通部分をv1へ戻し、Hookの出力もv1へ戻ることを確認する。
-6. 共有部分だけを外し、既存の指示やHookを保持する。
-7. 共有元の不正と書き込み途中の障害で、旧状態が保たれることを確認する。
-
-GitHubの代わりにローカルのGitを使い、コミット取得から配布まで試す場合は次を実行する。
-
-```sh
-python3 prototype/git_demo.py
-```
-
-結果は生成したフォルダの `report.md` と `report.json` に残る。生成物はGit対象外で、再実行すれば新しく作成できる。検証後の削除対象は `.prototype/` に限定し、実装の `prototype/` は残す。[検証範囲](docs/VALIDATION.md)も参照。
-
-## 操作を個別に試す
-
-```sh
-python3 -m prototype init
-```
-
-表示された `sandbox` のパスを、以下の `PATH` に指定する。`--pc personal` が個人、`--pc work` が仕事の模擬Mac。
-
-```sh
-python3 -m prototype --sandbox PATH --pc work sync --at 2026-10-20T10:00:00+09:00
-python3 -m prototype --sandbox PATH --pc work status
-```
-
-| 操作 | 最後に指定するコマンド |
+| 出力 | 確認する内容 |
 | --- | --- |
-| 受信して差分だけ確認する | `preview-sync` |
-| 更新を止める／再開する | `pause-sync` / `resume-sync` |
-| 共有Hookを止める／再開する | `pause-hooks` / `resume-hooks` |
-| 前の共有版への復元を確認する | `restore` |
-| 確認した復元を模擬環境へ適用する | `restore --apply` |
-| 導入取り消しを確認する | `uninstall` |
-| 確認した導入取り消しを模擬環境へ適用する | `uninstall --apply` |
+| `report.md` | 対象Mac・プロファイル・受信コミット・変更対象 |
+| `changes.patch` | 既存設定への追記と配布処理の全差分 |
+| `plan.json` | 適用時に照合する導入計画 |
 
-復元・導入取り消しは既定でプレビュー。適用後は更新と共有Hookの両方を止める。更新の再開だけではHookの停止を解除しない。`sync --force` は時刻と当日実行済み判定を省くが、更新停止を解除しない。
-
-`source/git.json`がないsandboxは、従来のローカルデータ`source/bundle.json`を使う。Git受信を設定する場合は、共通引数の後へ次を指定する。
+これらは既存設定を含むため公開せず、そのMacだけで使います。
+差分を確認し、対象のAIでの作業を終えてから適用します。
 
 ```sh
-python3 -m prototype --sandbox PATH --pc work configure-git --url git@github.com:9uiLe/dotenv.git --branch master
-python3 -m prototype --sandbox PATH --pc work preview-sync
+python3 -B -m ai_knowledge apply --plan /表示された絶対パス/plan.json --apply
 ```
 
-設定の保存時は通信しない。`preview-sync`は取得用キャッシュだけを更新し、配布先・適用済み版・受信成功の記録を変えずに差分を示す。通常の`sync`は日次判定後に取得し、配布まで成功したときだけコミットを適用済みとして記録する。Gitへ送信する機能はない。
+共有元・受信コミット・配布処理・既存設定を再照合し、計画作成後の変化があれば拒否します。
+初回配布は時刻にかかわらず実行します。Codexの新規Hookの信頼確認はユーザー自身で行います。
 
-上の例はこの公開リポジトリの`master`を受信元にする設定。SSHでの受信には各Macの認証設定が必要で、SSHによる実際のGitHub受信は未検証。Mac向け導入ではHTTPSによる受信を確認している。
+導入時のPythonの場所を保存するため、その実行ファイルを移動・削除しないでください。
+配布処理は管理フォルダへコピーされ、元のcheckoutには依存しません。
+日次更新の対象は`shared/`の共有内容で、配布処理やPython自体は自動更新しません。
 
-## 共有する原本
+## 管理する設定
 
-`shared/manifest.json`が、版の名前・共通ルールのファイル・共有するスキルとスクリプトの一覧・Hook定義を指定する。本文は`shared/rules.md`、`shared/skills/`、`shared/hooks/`に置く。ルール・スキル・会話開始時Hookは架空の見本で、既存のPC設定を取り込んだものではない。`hooks/token_limit.py`はPC共通のGitコミット前検査の原本として配布する。
+既存設定を保持し、目印を付けた共有部分と専用ファイルだけを管理します。
 
-受信器は指定ブランチのコミットから、manifestに載った通常ファイルを読む。チェックアウト、受信したリポジトリのスクリプト実行、自動マージは行わない。前回成功コミットの子孫でない履歴や、不正な内容は拒否する。旧版へ手動復元しても、履歴変更を検出するための受信基準は巻き戻さない。
+| 場所（`~`は本人のホーム） | 内容 |
+| --- | --- |
+| `~/.codex/AGENTS.md`、`~/.agents/skills/ai-knowledge-*/` | Codexの共有ルールとスキル |
+| `~/.codex/hooks.json`または`~/.codex/config.toml` | 既存形式に合わせた共有Hook登録 |
+| `~/.claude/CLAUDE.md`、`~/.claude/skills/ai-knowledge-*/`、`~/.claude/settings.json` | workだけ、Claude Codeの共有設定 |
+| `~/.gitconfig` | PC共通のGit設定への専用include |
+| `~/.local/share/ai-knowledge/` | 配布処理、共有版、状態、Git設定・Hook、バックアップ、ログ |
+| `~/Library/LaunchAgents/local.ai-knowledge.sync.plist` | 毎日10:00とログイン時の起動 |
 
-従来の模擬コマンドのGit受信はHTTPS（公開リポジトリ）とSSHに対応する。SSHは既存のssh-agentと登録済みホスト鍵だけを使い、対話ログインや新しい鍵の登録はしない。SSHの外部認証とHTTPSでの非公開リポジトリ認証は未対応または未検証。新しいMac向け導入経路は公開GitHubのHTTPSだけを対象とし、取得とCI成功確認を検証している。
+本人所有・私有の管理領域を使い、シンボリックリンクや特殊ファイル、不適切な権限を拒否します。
+同名スキル、`AGENTS.override.md`、管理する共有部分の直接編集を検出した場合も停止します。
+個別設定を全文置換して競合を解消することはありません。
 
-Gitの受信仕様は[fetch](https://git-scm.com/docs/git-fetch)、[履歴関係の判定](https://git-scm.com/docs/git-merge-base)、[通常blobの読み取り](https://git-scm.com/docs/git-cat-file)を参照。
+## 日次更新と操作
 
-## 旧試作品の差分案を読む
-
-`preview-install`は指定したホームを読み取ってコピーし、別の模擬環境へ導入差分を保存する。コピーや差分はGit対象外のフォルダに本人だけが読める権限で保存する。元の設定へ書き込む機能はない。
+導入時と同じPythonで、配置済みの起動ファイルを使います。
 
 ```sh
-python3 -m prototype --sandbox PATH --pc personal preview-install --read-home /Users/USER --source-url git@github.com:9uiLe/dotenv.git --source-branch master
+task_runtime="$HOME/.local/share/ai-knowledge/runtime/ai_knowledge/entrypoint.py"
+python3 "$task_runtime" status
+python3 "$task_runtime" sync
 ```
 
-`PATH`は模擬受信に使ったsandbox、`/Users/USER`は読取対象のホームに置き換える。この旧形式の差分は適用できない。実際の導入には`ai_knowledge plan`でランタイムを含む計画を作成する。
+各Macの現地時刻10:00以降、当日まだ成功していなければ受信します。
+ログイン時も同じ日次判定を行います。受信コミットと一致するCIの最新実行が成功した場合だけ
+反映し、通信失敗・CI待ち・CI失敗・履歴の巻き戻し・競合では前の共有版を保持します。
+失敗は当日の成功に数えません。必要なら`sync`で再試行できます。
 
-## 実装と検証の範囲
+次の操作は`python3 "$task_runtime" 操作名`で実行します。
 
-管理状態と旧版を保存するため、別の実行からも更新や復元を続けられる。配布先の共通部分や日次設定の直接編集を検出したら停止し、既存設定を上書きしない。追加した共有ファイルを外す場合は、削除せず退避する。Codexの既存Hookがconfig.toml内にある場合も、コメントや他の設定を保持して共存する。
+| 操作名 | 結果 |
+| --- | --- |
+| `status` | 共有版・停止状態・直近の結果・OS登録を表示 |
+| `pause-sync` / `resume-sync` | 更新と日次登録を停止／再開 |
+| `pause-hooks` / `resume-hooks` | 会話用共有HookとPC共通トークン検査を停止／再開 |
+| `restore` | 前の共有版へ戻す差分を表示 |
+| `uninstall` | 共有部分を取り外す差分を表示 |
+| `reinstall` | 取り外した状態から再導入する差分を表示 |
 
-Hookの例は、会話開始時に共有版を返すだけの単独Pythonスクリプト。配布済みファイルを原本と照合してから起動する。任意のスクリプトをOSで隔離する機能ではなく、実行したサンプルは通信・ファイル変更を行わない。
+`restore`・`uninstall`・`reinstall`は、差分を確認してから`--apply`を付けて適用します。
 
-`prototype`コマンドの書き込み対象は専用マーカーのある `.prototype/` 内だけ。`ai_knowledge`コマンドは本人のMacへの導入を行い、個人用Macで実OSへの登録まで確認している。仕事用の適用は模擬環境で検証している。
+```sh
+python3 "$task_runtime" restore --apply
+python3 "$task_runtime" uninstall --apply
+python3 "$task_runtime" reinstall --apply
+```
 
-公開GitHubからの受信・CI成功確認、Codexへの共有ルール・スキルの読み込み、共有Hookだけの信頼設定、OS経由の手動起動を確認済み。自然な日次起動、ログイン・スリープ復帰時の起動、Claude Codeでの読み込みは未確認。[検証範囲](docs/VALIDATION.md)と[導入手順](docs/MAC_INSTALL.md)で確認結果・変更対象・停止と復元を示している。
+復元・取り外しは更新と共有Hookを止めてから実行します。初回導入前へ戻す場合は
+`uninstall`を使います。配布ファイルは退避し、既存設定・既存Hook・履歴・バックアップ・
+配布処理を保持します。再導入時も受信とCI確認を行い、共有Hookは停止のままにします。
+必要に応じて`resume-hooks`で再開してください。`resume-sync`だけでは共有Hookは再開しません。
 
-## 開発用のコミット前チェック
+更新中などでロックされていれば強制終了せず失敗を報告するので、処理終了後に再試行します。
+OS登録失敗時の`sync_stop_confirmed: false`は更新停止も確認できていない状態です。
+`pause-sync`を再実行して`status`を確認します。
+ログは管理フォルダの`sync.log`と`sync-error.log`にあり、設定本文・会話・Hook入力を記録しません。
+管理状態の上限は64MiBで、超過する更新は適用しません。
 
-共有設定を導入したPCでは、ステージ済みファイルが5,000トークン（バイト数 / 4、
-20,000バイト）を超えるとコミットを止め、分割手順を表示する。
-ロックファイルや生成コードなどは除外する。PC共通のGit設定で他プロジェクトにも適用し、
-既存のGitフックへも処理を引き継ぐ。個別の `core.hooksPath` があるプロジェクトでは連携が必要。
+## コミット前の5,000トークン制限
 
-このリポジトリでも同じ共有原本を使う。クローンごとに次を実行して有効にする。
+ステージ済みの追加・変更・リネーム・種別変更された通常ファイルを検査し、
+**バイト数 / 4が5,000を超える場合（20,001バイト以上）**にコミットを止めます。
+部分ステージもGitのインデックス内の内容で判定し、未ステージの内容や未変更ファイル、
+削除・シンボリックリンク・サブモジュールは対象にしません。
+
+Gitから編集者がエージェントかどうかを確定できないため、手書きで管理するファイルを対象とし、
+既知のロックファイル、`generated/`・`__generated__/`・`vendor/`・`node_modules/`配下、
+生成コード・圧縮済みコードの既知の名前を除外します。具体的な規則は
+`shared/hooks/token_limit.py`にあります。それ以外の生成物や外部データはGit属性で明示します。
+
+```gitattributes
+api/client.py linguist-generated=true
+third_party/** linguist-vendored
+assets/logo.png token-limit-ignore
+```
+
+属性はステージ済みの`.gitattributes`を参照するので、その変更もステージしてください。
+手書きのソースや文書の制限を回避するためには使いません。
+
+上限超過のエラーは対象とサイズに加えて、次の分割手順を表示します。
+
+1. クラス・機能・責務ごとに別モジュールへ分割する。共通の型・補助関数・テストデータは専用ファイルへ、文書は章ごとに移す。
+2. `import`・`include`・文書リンクを更新し、動作を確認する。
+3. 各ファイルを20,000バイト以下にして、元ファイルと新ファイルを`git add`し、再度コミットする。
+
+PC共通フックは既存のGitフックへ処理・引数・標準入力・終了コードを引き継ぎます。
+リポジトリ個別の`core.hooksPath`がある場合はそちらが優先されるので、
+その`pre-commit`の先頭から検査専用の起動ファイルを呼び出します。
+
+```sh
+"$HOME/.local/share/ai-knowledge/git-hooks/check-token-limit" || exit $?
+```
+
+この呼び出しは呼び出し元フックへ再帰しません。このリポジトリには同じ共有原本を呼ぶ
+`.githooks/pre-commit`があり、クローンごとに次で有効化します。
 
 ```sh
 git config --local core.hooksPath .githooks
 ```
 
-旧ランタイム導入済みPCの更新、個別フックとの連携、除外ルールと分割方法は
-[コミット前チェックの説明](docs/PRE_COMMIT.md)を参照。
-
-## 再現できる検証
+## 開発と検証
 
 ```sh
-python3 -m unittest discover -s prototype -p 'test_*.py' -v
+python3 -B -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-試験用フォルダも `.prototype/` に生成する。試験の責任は、更新・停止・復元の仕様、設定ファイルとHook起動の連携、CLIの通し操作に分けている。[CIとリポジトリの権限](docs/CI.md)も参照。
+テストは私有の一時フォルダに模擬ホームとGitリポジトリを作り、本人の設定を変更しません。
+導入・受信・時刻判定・既存設定保持・停止・復元・障害復旧・配布済み処理の起動・
+コミット前検査を確認します。OS登録とGitHub API応答は模擬化するため、
+実機の自然な定刻起動やAIアプリでのHook実行までは自動テストで保証しません。
+
+`master`へのpushでCIを実行します。全Git履歴の秘密情報検査、Pythonのセキュリティ検査、
+共有manifestとHookの構文検証、Linux/Python 3.11・macOS/Python 3.14での回帰試験を行います。
+Actionsは完全なコミットSHA、検査ツールと依存は固定し、CIの権限は読み取りだけです。
+受信器はこのCIの成功を確認するので、公開前の作業ファイルは各PCへ配布されません。
+
+受信時はmanifestに載る通常ファイルだけを読み、checkout・自動マージ・受信元リポジトリの
+コード実行は行いません。配布済みHookと実行処理は整合性を確認してから起動します。
+HookのOS隔離機能はないため、共有スクリプトも公開前に確認してください。

@@ -2,16 +2,18 @@
 
 from pathlib import Path
 import subprocess
+import shutil
 import unittest
 from unittest.mock import patch
 
 from ai_knowledge.scheduler import FakeLaunchctl, LABEL, PLIST, Scheduler
-from prototype.sandbox import create_sandbox
+from ai_knowledge.sandbox import create_sandbox
 
 
 class SchedulerTests(unittest.TestCase):
     def setUp(self):
         self.root = create_sandbox(prefix='scheduler-test-')
+        self.addCleanup(shutil.rmtree, self.root)
         self.home = self.root / 'personal'
         self.plist = self.home / PLIST
         self.plist.parent.mkdir(parents=True)

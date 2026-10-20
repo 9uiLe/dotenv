@@ -2,15 +2,14 @@
 
 from dataclasses import dataclass
 import os
-import json
 from pathlib import Path, PurePosixPath
 import platform
 import pwd
 import stat
 import sys
 
-from prototype.engine import RULES, SCHEDULE, SKILLS
-from prototype.sandbox import check_home
+from ai_knowledge.engine import RULES, SCHEDULE, SKILLS
+from ai_knowledge.sandbox import check_home
 
 
 def _normal(path):
@@ -32,38 +31,6 @@ def _check_path(path, *, directory=False):
         leaf = candidate == path and not directory
         if not stat.S_ISDIR(metadata.st_mode) and not (leaf and stat.S_ISREG(metadata.st_mode)):
             raise ValueError('管理対象に通常ファイル・フォルダ以外があります')
-
-
-def _mock_home(home):
-    try:
-        return check_home(home)
-    except ValueError:
-        # Installed mock processes import this copy, whose repository constant
-        # points into runtime/. Accept that one installed home only.
-        loaded_runtime = Path(__file__).absolute().parents[1]
-        if (loaded_runtime != home / '.local/share/ai-knowledge/runtime'
-                or home.name not in {'personal', 'work'}
-                or home.parent.parent.name != '.prototype'):
-            raise
-        _check_path(home, directory=True)
-        root = home.parent
-        marker = root / '.ai-knowledge-sandbox.json'
-        _check_path(marker)
-        if not marker.is_file() or marker.stat().st_size > 4096:
-            raise ValueError('模擬環境のマーカーが不正です')
-        document = json.loads(marker.read_text(encoding='utf-8'))
-        if (not isinstance(document, dict) or set(document) != {'schema'}
-                or type(document['schema']) is not int or document['schema'] != 1):
-            raise ValueError('模擬環境のマーカーが不正です')
-        def unreadable(error):
-            raise ValueError('模擬環境を確認できません') from error
-
-        for directory, folders, files in os.walk(root, followlinks=False, onerror=unreadable):
-            for name in folders:
-                _check_path(Path(directory) / name, directory=True)
-            for name in files:
-                _check_path(Path(directory) / name)
-        return home
 
 
 @dataclass(frozen=True)
@@ -143,7 +110,7 @@ class Target:
         if self.mode == 'mock':
             if self.home.name != self.profile:
                 raise ValueError('模擬PCとプロファイルが一致しません')
-            return _mock_home(self.home)
+            return check_home(self.home)
         if (platform.system() != 'Darwin' or os.getuid() == 0
                 or os.geteuid() != os.getuid()):
             raise ValueError('本番導入は通常ユーザー権限のMacで実行してください')

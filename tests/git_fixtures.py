@@ -6,8 +6,8 @@ from pathlib import Path, PurePosixPath
 import re
 import subprocess
 
-from prototype.fixtures import make_bundle
-from prototype.sandbox import check_home
+from tests.fixtures import make_bundle
+from ai_knowledge.sandbox import check_home
 
 
 class LocalRemote:
