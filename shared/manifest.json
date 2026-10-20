@@ -2,8 +2,14 @@
   "schema": 1,
   "version": "example-v1",
   "rules": "rules.md",
+  "instructions": {
+    "codex": "instructions/AGENTS.md",
+    "claude": "instructions/CLAUDE.md"
+  },
+  "skills": {
+    "ai-knowledge-example": ["codex", "claude"]
+  },
   "files": [
-    "skills/ai-knowledge-example/SKILL.md",
     "hooks/session_start.py",
     "hooks/token_limit.py"
   ],

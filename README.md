@@ -1,142 +1,123 @@
-# Mac間でAIの設定を共有する
+# Mac間で共有するAI設定
 
-複数のMacへ、共通ルール・スキル・HookとGitのコミット前検査を配るリポジトリです。
-原本をここで編集・公開し、各MacはCIが成功した共有版を毎日10:00に受信します。
-実行時の依存はPython 3.11以上とGitだけです。
+Codex・Claude Codeへ配る指示ファイル・スキル・Hookの原本です。
+導入・日次更新・停止・復元は、独立した[ai-knowledge CLI](https://github.com/9uiLe/ai-knowledge)が担当します。
+このリポジトリには共有原本、その検証テスト、CI、コミット前フックを置きます。
+
+## cloneせずに導入する
+
+通常ユーザーでログインしたMacで、[uv](https://docs.astral.sh/uv/getting-started/installation/)とGitを用意します。
+Python 3.11以上が必要です。uvに既存Pythonがなければ、対応するPythonを取得します。
+`personal`はCodex、`work`はCodexとClaude Codeを対象にします。
+
+```sh
+uvx --from https://github.com/9uiLe/ai-knowledge/archive/refs/heads/main.tar.gz \
+  ai-knowledge --profile personal plan
+```
+
+`report.md`と`changes.patch`を確認してから、表示された計画を適用します。
+
+```sh
+uvx --from https://github.com/9uiLe/ai-knowledge/archive/refs/heads/main.tar.gz \
+  ai-knowledge apply --plan /表示された絶対パス/plan.json --apply
+```
+
+設定の原本をcloneしたり、PyPIへ公開したりする必要はありません。
+初期受信元はこのリポジトリの`master`です。別の受信元は`plan --url ... --branch ...`で指定できます。
+仕事用Macでは`personal`を`work`に置き換えます。運用・復元・対応範囲は
+[CLIのREADME](https://github.com/9uiLe/ai-knowledge#readme)を参照してください。
+CLIのコードが変わった場合、適用時の再照合で停止するので、計画を作り直します。
+同じ版を確実に使うにはURLの`refs/heads/main`をCLIの完全なコミットSHAに置き換えます。
 
 ## 構成と編集場所
 
 ```text
-shared/                  各PCへ配る原本
-  manifest.json          共有版・配布ファイル・Hook定義
+shared/
+  manifest.json          共有版・配置先・配布ファイル・Hook定義
   rules.md               共通ルール
-  skills/                共通スキル
+  instructions/
+    AGENTS.md            Codex専用の指示
+    CLAUDE.md            Claude Code専用の指示
+  skills/                スキル本体と補助ファイル
   hooks/                 会話開始時Hookとコミット前検査
-ai_knowledge/            導入・受信・日次更新・停止・復元
-tests/                   隔離環境での自動テストとfixture
+tests/                  共有原本とコミット前検査のテスト
 .githooks/pre-commit     このリポジトリのコミット前検査
-.github/workflows/ci.yml 公開する共有版の検証
-requirements-ci.txt     CI専用依存の固定
-README.md                導入と運用の説明
-.gitignore               一時生成物の除外
+.github/workflows/ci.yml 共有原本のCI
+requirements-ci.txt     CI専用の検査ツール
 ```
 
-普段編集するのは`shared/`です。ファイルの追加・削除やHookの変更は
-`shared/manifest.json`にも反映します。現在のルール・スキル・会話開始時Hookは
-`example-v1`の見本で、既存PCから取り込んだ設定ではありません。
-配布済みの対象を共有元から削除した場合は、自動削除せず更新を停止します。
+普段編集するのは`shared/`です。現在の設定は`example-v1`の見本で、既存PCから取り込んだものではありません。
 会社・案件固有の情報や認証情報は共有しません。公開するタイミングは自分で決めます。
+CLIの実装と配布処理のテストは`ai-knowledge`側で管理します。
 
-## 初回導入
+## 指示ファイルとスキルを登録する
 
-通常ユーザーでログインしたMacで実行します。`personal`はCodex、`work`は
-CodexとClaude Codeを対象にします。標準のホームと設定場所を使い、
-`CODEX_HOME`や`CLAUDE_CONFIG_DIR`による別の配置は対象外です。
+manifestのパスは`shared/`からの相対パスです。`rules`を共通ルールとし、
+`instructions`には必要なツールの専用指示を指定します。
 
-```sh
-git clone https://github.com/9uiLe/dotenv.git
-cd dotenv
-python3 -B -m ai_knowledge --profile personal plan
+| 原本 | Codex | Claude Code（work） |
+| --- | --- | --- |
+| `rules.md` | `~/.codex/AGENTS.md`の管理部分 | `~/.claude/CLAUDE.md`の管理部分 |
+| `instructions/AGENTS.md` | 共通ルールの後に追記 | — |
+| `instructions/CLAUDE.md` | — | 共通ルールの後に追記 |
+| `skills/<name>/` | `~/.agents/skills/<name>/` | `~/.claude/skills/<name>/` |
+
+既存の指示は残し、目印のある部分だけを更新します。スキルはコピーします。
+`skills`はスキル名と配布先の対応で、`["claude"]`ならworkのClaude Codeだけに配ります。
+プロファイルで無効なツールには配りません。
+
+```json
+{
+  "schema": 1,
+  "version": "example-v1",
+  "rules": "rules.md",
+  "instructions": {
+    "codex": "instructions/AGENTS.md",
+    "claude": "instructions/CLAUDE.md"
+  },
+  "skills": {
+    "ai-knowledge-example": ["codex", "claude"]
+  },
+  "files": ["hooks/session_start.py", "hooks/token_limit.py"],
+  "hooks": []
+}
 ```
 
-仕事用Macでは`personal`を`work`に置き換えます。受信元の初期値は
-公開GitHubの`9uiLe/dotenv`、ブランチは`master`です。
-`plan`は既存設定を読み取り、導入差分を表示された私有の一時フォルダへ保存します。
-設定変更や日次処理の登録はまだ行いません。
+上記は配置項目の例です。実際の`hooks`には会話開始時Hookの定義があります。
+`instructions`省略時は共通ルールだけ、`skills`省略時は`files`に明記したスキルを両ツールへ配ります。
 
-| 出力 | 確認する内容 |
-| --- | --- |
-| `report.md` | 対象Mac・プロファイル・受信コミット・変更対象 |
-| `changes.patch` | 既存設定への追記と配布処理の全差分 |
-| `plan.json` | 適用時に照合する導入計画 |
+スキルを追加する手順:
 
-これらは既存設定を含むため公開せず、そのMacだけで使います。
-差分を確認し、対象のAIでの作業を終えてから適用します。
+1. `shared/skills/<name>/SKILL.md`を作り、frontmatterに`name`と`description`を記載する。
+2. `<name>`は小文字の英数字とハイフンで1〜64文字にし、frontmatterの`name`と一致させる。
+   先頭・末尾・連続するハイフンは使わない。特定の接頭辞は不要。
+3. `references/`や`scripts/`などの補助ファイルを同じスキル配下へ入れる。
+4. manifestの`skills`に名前と対象ツールを登録する。配下の各ファイルを`files`に列挙する必要はない。
+5. 原本を検証して公開し、CLIの`plan`で導入差分を確認する。
 
 ```sh
-python3 -B -m ai_knowledge apply --plan /表示された絶対パス/plan.json --apply
+uvx --from https://github.com/9uiLe/ai-knowledge/archive/refs/heads/main.tar.gz \
+  ai-knowledge validate shared
 ```
 
-共有元・受信コミット・配布処理・既存設定を再照合し、計画作成後の変化があれば拒否します。
-初回配布は時刻にかかわらず実行します。Codexの新規Hookの信頼確認はユーザー自身で行います。
-
-導入時のPythonの場所を保存するため、その実行ファイルを移動・削除しないでください。
-配布処理は管理フォルダへコピーされ、元のcheckoutには依存しません。
-日次更新の対象は`shared/`の共有内容で、配布処理やPython自体は自動更新しません。
-
-## 管理する設定
-
-既存設定を保持し、目印を付けた共有部分と専用ファイルだけを管理します。
-
-| 場所（`~`は本人のホーム） | 内容 |
-| --- | --- |
-| `~/.codex/AGENTS.md`、`~/.agents/skills/ai-knowledge-*/` | Codexの共有ルールとスキル |
-| `~/.codex/hooks.json`または`~/.codex/config.toml` | 既存形式に合わせた共有Hook登録 |
-| `~/.claude/CLAUDE.md`、`~/.claude/skills/ai-knowledge-*/`、`~/.claude/settings.json` | workだけ、Claude Codeの共有設定 |
-| `~/.gitconfig` | PC共通のGit設定への専用include |
-| `~/.local/share/ai-knowledge/` | 配布処理、共有版、状態、Git設定・Hook、バックアップ、ログ |
-| `~/Library/LaunchAgents/local.ai-knowledge.sync.plist` | 毎日10:00とログイン時の起動 |
-
-本人所有・私有の管理領域を使い、シンボリックリンクや特殊ファイル、不適切な権限を拒否します。
-同名スキル、`AGENTS.override.md`、管理する共有部分の直接編集を検出した場合も停止します。
-個別設定を全文置換して競合を解消することはありません。
-
-## 日次更新と操作
-
-導入時と同じPythonで、配置済みの起動ファイルを使います。
-
-```sh
-task_runtime="$HOME/.local/share/ai-knowledge/runtime/ai_knowledge/entrypoint.py"
-python3 "$task_runtime" status
-python3 "$task_runtime" sync
-```
-
-各Macの現地時刻10:00以降、当日まだ成功していなければ受信します。
-ログイン時も同じ日次判定を行います。受信コミットと一致するCIの最新実行が成功した場合だけ
-反映し、通信失敗・CI待ち・CI失敗・履歴の巻き戻し・競合では前の共有版を保持します。
-失敗は当日の成功に数えません。必要なら`sync`で再試行できます。
-
-次の操作は`python3 "$task_runtime" 操作名`で実行します。
-
-| 操作名 | 結果 |
-| --- | --- |
-| `status` | 共有版・停止状態・直近の結果・OS登録を表示 |
-| `pause-sync` / `resume-sync` | 更新と日次登録を停止／再開 |
-| `pause-hooks` / `resume-hooks` | 会話用共有HookとPC共通トークン検査を停止／再開 |
-| `restore` | 前の共有版へ戻す差分を表示 |
-| `uninstall` | 共有部分を取り外す差分を表示 |
-| `reinstall` | 取り外した状態から再導入する差分を表示 |
-
-`restore`・`uninstall`・`reinstall`は、差分を確認してから`--apply`を付けて適用します。
-
-```sh
-python3 "$task_runtime" restore --apply
-python3 "$task_runtime" uninstall --apply
-python3 "$task_runtime" reinstall --apply
-```
-
-復元・取り外しは更新と共有Hookを止めてから実行します。初回導入前へ戻す場合は
-`uninstall`を使います。配布ファイルは退避し、既存設定・既存Hook・履歴・バックアップ・
-配布処理を保持します。再導入時も受信とCI確認を行い、共有Hookは停止のままにします。
-必要に応じて`resume-hooks`で再開してください。`resume-sync`だけでは共有Hookは再開しません。
-
-更新中などでロックされていれば強制終了せず失敗を報告するので、処理終了後に再試行します。
-OS登録失敗時の`sync_stop_confirmed: false`は更新停止も確認できていない状態です。
-`pause-sync`を再実行して`status`を確認します。
-ログは管理フォルダの`sync.log`と`sync-error.log`にあり、設定本文・会話・Hook入力を記録しません。
-管理状態の上限は64MiBで、超過する更新は適用しません。
+スキル一式はUTF-8テキストを対象とし、画像等のバイナリ・リンク・サブモジュールは拒否します。
+各ファイルは1MiB以下、共有内容は合計5MiB以下、配布ファイルは1,024件以下です。
+スクリプトは`python3 scripts/check.py`のようにインタープリターで起動します。
+Claude Code向けには予約名`synced`と`anthropic-skills`を使えません。
+同名の未管理スキルは上書きしません。配布先からツールを外した場合は、そのツールの管理ファイルだけを退避します。
+原本からファイルそのものを削除した場合は自動削除せず更新を止めるため、CLIの明示的な取り外しで扱います。
 
 ## コミット前の5,000トークン制限
 
 ステージ済みの追加・変更・リネーム・種別変更された通常ファイルを検査し、
 **バイト数 / 4が5,000を超える場合（20,001バイト以上）**にコミットを止めます。
-部分ステージもGitのインデックス内の内容で判定し、未ステージの内容や未変更ファイル、
-削除・シンボリックリンク・サブモジュールは対象にしません。
+部分ステージもGitのインデックス内の内容で判定します。未ステージの内容・未変更ファイル・削除・リンク・
+サブモジュールは対象にしません。
 
 Gitから編集者がエージェントかどうかを確定できないため、手書きで管理するファイルを対象とし、
 既知のロックファイル、`generated/`・`__generated__/`・`vendor/`・`node_modules/`配下、
-生成コード・圧縮済みコードの既知の名前を除外します。具体的な規則は
-`shared/hooks/token_limit.py`にあります。それ以外の生成物や外部データはGit属性で明示します。
+既知の生成コード・圧縮済みコードを除外します。原本は`shared/hooks/token_limit.py`です。
+それ以外の生成物や外部データはGit属性で明示します。
 
 ```gitattributes
 api/client.py linguist-generated=true
@@ -145,24 +126,20 @@ assets/logo.png token-limit-ignore
 ```
 
 属性はステージ済みの`.gitattributes`を参照するので、その変更もステージしてください。
-手書きのソースや文書の制限を回避するためには使いません。
-
-上限超過のエラーは対象とサイズに加えて、次の分割手順を表示します。
+手書きのソースや文書の制限を回避するためには使いません。エラーには次の手順を表示します。
 
 1. クラス・機能・責務ごとに別モジュールへ分割する。共通の型・補助関数・テストデータは専用ファイルへ、文書は章ごとに移す。
 2. `import`・`include`・文書リンクを更新し、動作を確認する。
 3. 各ファイルを20,000バイト以下にして、元ファイルと新ファイルを`git add`し、再度コミットする。
 
-PC共通フックは既存のGitフックへ処理・引数・標準入力・終了コードを引き継ぎます。
-リポジトリ個別の`core.hooksPath`がある場合はそちらが優先されるので、
-その`pre-commit`の先頭から検査専用の起動ファイルを呼び出します。
+CLIはこの原本をPC共通フックへ配布します。既存フックの処理・引数・標準入力・終了コードも引き継ぎます。
+個別の`core.hooksPath`が優先されるリポジトリでは、その`pre-commit`の先頭から検査専用の起動ファイルを呼びます。
 
 ```sh
 "$HOME/.local/share/ai-knowledge/git-hooks/check-token-limit" || exit $?
 ```
 
-この呼び出しは呼び出し元フックへ再帰しません。このリポジトリには同じ共有原本を呼ぶ
-`.githooks/pre-commit`があり、クローンごとに次で有効化します。
+このリポジトリ自身には同じ原本を呼ぶ`.githooks/pre-commit`があります。開発用cloneで有効にします。
 
 ```sh
 git config --local core.hooksPath .githooks
@@ -170,20 +147,19 @@ git config --local core.hooksPath .githooks
 
 ## 開発と検証
 
+原本の編集とテストを行う場合だけ、このリポジトリをcloneします。CLIはダウンロードして使えます。
+
 ```sh
-python3 -B -m unittest discover -s tests -p 'test_*.py' -v
+uv run --no-project \
+  --with https://github.com/9uiLe/ai-knowledge/archive/refs/heads/main.tar.gz \
+  python -B -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-テストは私有の一時フォルダに模擬ホームとGitリポジトリを作り、本人の設定を変更しません。
-導入・受信・時刻判定・既存設定保持・停止・復元・障害復旧・配布済み処理の起動・
-コミット前検査を確認します。OS登録とGitHub API応答は模擬化するため、
-実機の自然な定刻起動やAIアプリでのHook実行までは自動テストで保証しません。
+共有原本の形式・Python構文・見本Hookの版と、実Gitを使ったコミット前検査を確認します。
+CLI側のテストは、受信・導入・日次更新・既存設定保持・停止・復元・障害復旧・フックの継承を確認します。
+双方のテストは本人の設定を変更しません。
 
 `master`へのpushでCIを実行します。全Git履歴の秘密情報検査、Pythonのセキュリティ検査、
-共有manifestとHookの構文検証、Linux/Python 3.11・macOS/Python 3.14での回帰試験を行います。
-Actionsは完全なコミットSHA、検査ツールと依存は固定し、CIの権限は読み取りだけです。
-受信器はこのCIの成功を確認するので、公開前の作業ファイルは各PCへ配布されません。
-
-受信時はmanifestに載る通常ファイルだけを読み、checkout・自動マージ・受信元リポジトリの
-コード実行は行いません。配布済みHookと実行処理は整合性を確認してから起動します。
-HookのOS隔離機能はないため、共有スクリプトも公開前に確認してください。
+共有原本の検証、Linux/Python 3.11・macOS/Python 3.14の回帰試験を行います。
+CIで使うCLIは完全なコミットSHAへ固定し、CLI側のCI成功を確認してから更新します。
+各PCはこのリポジトリの受信コミットと一致するCIが成功した場合だけ共有原本を反映します。
